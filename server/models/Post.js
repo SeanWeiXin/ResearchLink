@@ -42,7 +42,10 @@ const postSchema = new mongoose.Schema({
         chartType: { type: String },
         title: { type: String },
         config: { type: Object }
-    }]
+    }],
+    isPinned: { type: Boolean, default: false },
+    pinnedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    pinnedAt: { type: Date }
 }, {
     timestamps: true
 });

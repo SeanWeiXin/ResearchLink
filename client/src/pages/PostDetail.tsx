@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Layout, Card, Typography, Avatar, Input, Button, Space, message, Divider, Modal, Tag, Timeline } from 'antd';
 import { useParams, useNavigate } from 'react-router-dom';
-import { EyeOutlined, HeartOutlined, StarOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
+import { EyeOutlined, HeartOutlined, StarOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { Post as PostType } from '../api/posts';
 import { getPost, addComment, deleteComment, toggleLike, toggleFavorite, deletePost } from '../api/posts';
 import { useAuthStore } from '../store/authStore';
@@ -109,7 +109,7 @@ const PostDetail: React.FC = () => {
           message.success('删除成功');
           navigate('/');
         } catch (error: any) {
-          message.error('删除失败');
+          message.error(error.response?.data?.message || '删除失败');
         }
       }
     });
@@ -126,6 +126,7 @@ const PostDetail: React.FC = () => {
   const isLiked = post.likes?.includes(user?.id!);
   const isFavorited = post.favorites?.includes(user?.id!);
   const isAuthor = user?.id === post.author?._id;
+  const isMaintainer = user?.role === 'admin';
 
   return (
     <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
@@ -178,11 +179,8 @@ const PostDetail: React.FC = () => {
                 <Text type="secondary">👁️ {post.views}</Text>
               </Space>
 
-              {isAuthor && (
+              {isMaintainer && (
                 <Space>
-                  <Button icon={<EditOutlined />} onClick={() => navigate(`/post/${id}/edit`)}>
-                    编辑
-                  </Button>
                   <Button icon={<DeleteOutlined />} danger onClick={handleDelete}>
                     删除
                   </Button>
@@ -209,7 +207,7 @@ const PostDetail: React.FC = () => {
                         </Text>
                       </div>
                       <div style={{ marginBottom: 8 }}>{comment.content}</div>
-                      {(user?.id === comment.author?._id || isAuthor) && (
+                      {(user?.id === comment.author?._id || isMaintainer) && (
                         <Button
                           type="link"
                           danger
@@ -220,7 +218,7 @@ const PostDetail: React.FC = () => {
                               message.success('删除成功');
                               loadPost();
                             } catch (error: any) {
-                              message.error('删除失败');
+                              message.error(error.response?.data?.message || '删除失败');
                             }
                           }}
                         >

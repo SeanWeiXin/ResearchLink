@@ -12,7 +12,7 @@ router.get('/', async (req, res) => {
             search, 
             page = 1, 
             limit = 10,
-            sortBy = 'createdAt',
+            sortBy = 'isPinned',
             order = 'desc'
         } = req.query;
         
@@ -35,7 +35,16 @@ router.get('/', async (req, res) => {
         
         // 排序
         const sortOptions = {};
-        sortOptions[sortBy] = order === 'asc' ? 1 : -1;
+        if (sortBy === 'isPinned') {
+            sortOptions.isPinned = -1;
+            sortOptions.createdAt = -1;
+        } else if (sortBy === 'likes') {
+            sortOptions.likes = order === 'asc' ? 1 : -1;
+        } else if (sortBy === 'favorites') {
+            sortOptions.favorites = order === 'asc' ? 1 : -1;
+        } else {
+            sortOptions[sortBy] = order === 'asc' ? 1 : -1;
+        }
         
         // 分页
         const skip = (page - 1) * limit;
@@ -45,7 +54,7 @@ router.get('/', async (req, res) => {
             .sort(sortOptions)
             .limit(parseInt(limit))
             .skip(skip)
-            .select('title content author category tags views likes favorites comments createdAt updatedAt');
+            .select('title content author category tags views likes favorites comments createdAt updatedAt isPinned');
         
         const total = await Post.countDocuments(query);
         
@@ -151,7 +160,7 @@ router.put('/:id', authMiddleware, async (req, res) => {
     }
 });
 
-// 删除帖子
+// 删除帖子（仅维护者可删除）
 router.delete('/:id', authMiddleware, async (req, res) => {
     try {
         const post = await Post.findById(req.params.id);
@@ -160,9 +169,9 @@ router.delete('/:id', authMiddleware, async (req, res) => {
             return res.status(404).json({ message: '帖子不存在' });
         }
         
-        // 检查是否是作者或管理员
-        if (post.author.toString() !== req.user.userId && req.user.role !== 'admin') {
-            return res.status(403).json({ message: '无权限删除' });
+        // 仅维护者（admin 角色）可以删除
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ message: '仅维护者有权限删除帖子' });
         }
         
         await Post.findByIdAndDelete(req.params.id);
@@ -170,6 +179,42 @@ router.delete('/:id', authMiddleware, async (req, res) => {
         res.json({ message: '删除成功' });
     } catch (err) {
         console.error('删除帖子错误:', err);
+        res.status(500).json({ message: '服务器错误' });
+    }
+});
+
+// 置顶/取消置顶帖子（仅维护者）
+router.put('/:id/pin', authMiddleware, async (req, res) => {
+    try {
+        // 检查是否为维护者
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ message: '仅维护者可以置顶帖子' });
+        }
+        
+        const post = await Post.findById(req.params.id);
+        if (!post) {
+            return res.status(404).json({ message: '帖子不存在' });
+        }
+        
+        const { isPinned } = req.body;
+        post.isPinned = isPinned !== undefined ? isPinned : !post.isPinned;
+        
+        if (post.isPinned) {
+            post.pinnedBy = req.user.userId;
+            post.pinnedAt = new Date();
+        } else {
+            post.pinnedBy = undefined;
+            post.pinnedAt = undefined;
+        }
+        
+        await post.save();
+        
+        res.json({
+            message: post.isPinned ? '置顶成功' : '取消置顶成功',
+            isPinned: post.isPinned
+        });
+    } catch (err) {
+        console.error('置顶操作错误:', err);
         res.status(500).json({ message: '服务器错误' });
     }
 });
@@ -229,7 +274,7 @@ router.post('/:id/comments', authMiddleware, async (req, res) => {
     }
 });
 
-// 删除评论
+// 删除评论（仅维护者可删除）
 router.delete('/:postId/comments/:commentId', authMiddleware, async (req, res) => {
     try {
         const post = await Post.findById(req.params.postId);
@@ -242,9 +287,9 @@ router.delete('/:postId/comments/:commentId', authMiddleware, async (req, res) =
             return res.status(404).json({ message: '评论不存在' });
         }
         
-        // 检查是否是评论作者或管理员
-        if (comment.author.toString() !== req.user.userId && req.user.role !== 'admin') {
-            return res.status(403).json({ message: '无权限删除' });
+        // 仅维护者可以删除评论
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ message: '仅维护者有权限删除评论' });
         }
         
         comment.remove();

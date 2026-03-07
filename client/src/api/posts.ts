@@ -16,6 +16,7 @@ export interface Post {
   favorites: string[];
   comments: Comment[];
   charts?: any[];
+  isPinned?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -55,6 +56,12 @@ export const getPosts = async (params?: {
   order?: 'asc' | 'desc';
 }): Promise<PostsResponse> => {
   const response = await apiClient.get('/posts', { params });
+  return response.data;
+};
+
+// 置顶/取消置顶帖子
+export const togglePin = async (postId: string, isPinned?: boolean): Promise<{ message: string; isPinned: boolean }> => {
+  const response = await apiClient.put(`/posts/${postId}/pin`, { isPinned });
   return response.data;
 };
 
