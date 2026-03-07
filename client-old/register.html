@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>注册 - ResearchLink</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo">🚀 ResearchLink</div>
+        <div class="nav-links">
+            <a href="index.html">首页</a>
+            <a href="login.html">登录</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="form-card" style="max-width: 400px;">
+            <h1>📝 注册</h1>
+            
+            <form id="register-form" onsubmit="handleRegister(event)">
+                <div class="form-group">
+                    <label for="username">用户名</label>
+                    <input type="text" id="username" required placeholder="设置用户名" minlength="3">
+                </div>
+
+                <div class="form-group">
+                    <label for="email">邮箱</label>
+                    <input type="email" id="email" required placeholder="your@email.com">
+                </div>
+
+                <div class="form-group">
+                    <label for="password">密码</label>
+                    <input type="password" id="password" required placeholder="设置密码" minlength="6">
+                </div>
+
+                <button type="submit" class="btn-primary" style="width: 100%;">注册</button>
+            </form>
+
+            <p style="text-align: center; margin-top: 1.5rem; color: #666;">
+                已有账号？<a href="login.html" style="color: #4a90e2;">立即登录</a>
+            </p>
+        </div>
+    </div>
+
+    <script src="js/auth.js"></script>
+</body>
+</html>

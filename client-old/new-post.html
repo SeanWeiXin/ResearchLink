@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>发布新帖 - 我的论坛</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo">🚀 我的论坛</div>
+        <div class="nav-links">
+            <a href="index.html">首页</a>
+            <a href="new-post.html">发布帖子</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="form-card">
+            <h1>✍️ 发布新帖子</h1>
+            
+            <form id="post-form" onsubmit="handleSubmit(event)">
+                <div class="form-group">
+                    <label>帖子类型</label>
+                    <div class="type-selector">
+                        <label class="radio-label">
+                            <input type="radio" name="type" value="blog" checked>
+                            <span class="radio-custom blog-radio">我的博客</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="type" value="user">
+                            <span class="radio-custom user-radio">用户分享</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="author">你的昵称</label>
+                    <input type="text" id="author" readonly>
+                </div>
+
+                <div class="form-group">
+                    <label for="title">标题</label>
+                    <input type="text" id="title" required placeholder="写一个吸引人的标题...">
+                </div>
+
+                <div class="form-group">
+                    <label for="content">内容</label>
+                    <textarea id="content" rows="8" required placeholder="分享你的想法..."></textarea>
+                    <div class="char-count"><span id="count">0</span> / 1000 字</div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="history.back()">取消</button>
+                    <button type="submit" class="btn-primary">发布帖子</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/auth.js"></script>
+    <script src="js/app.js"></script>
+    <script>
+        // 字数统计
+        document.getElementById('content').addEventListener('input', function() {
+            document.getElementById('count').textContent = this.value.length;
+        });
+        
+        // 填充当前用户名
+        const userStr = localStorage.getItem('user');
+        const user = userStr ? JSON.parse(userStr) : null;
+        document.getElementById('author').value = user?.username || '游客';
+        
+        // 更新导航栏
+        updateNav();
+    </script>
+</body>
+</html>

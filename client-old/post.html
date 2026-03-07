@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>帖子详情 - 我的论坛</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo">🚀 我的论坛</div>
+        <div class="nav-links">
+            <a href="index.html">首页</a>
+            <a href="new-post.html">发布帖子</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- 帖子内容 -->
+        <article class="post-detail" id="post-detail">
+            <!-- 动态填充 -->
+        </article>
+
+        <!-- 评论区 -->
+        <section class="comments-section">
+            <h3>💬 评论 (<span id="comment-count">0</span>)</h3>
+            
+            <!-- 发表评论 -->
+            <div class="comment-form">
+                <input type="text" id="comment-name" placeholder="你的昵称" class="comment-input">
+                <textarea id="comment-content" placeholder="写下你的评论..." rows="3" class="comment-textarea"></textarea>
+                <button onclick="addComment()" class="btn-primary">发表评论</button>
+            </div>
+
+            <!-- 评论列表 -->
+            <div id="comments-list" class="comments-list">
+                <!-- 动态填充 -->
+            </div>
+        </section>
+    </div>
+
+    <script src="js/auth.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
