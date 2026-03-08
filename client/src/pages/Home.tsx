@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Layout, Card, Tag, Input, Select, Button, Space, Typography, message, Avatar, Empty, Dropdown, Menu, Row, Col, Popconfirm, Divider } from 'antd';
-import { SearchOutlined, PlusOutlined, UserOutlined, LogoutOutlined, LikeOutlined, StarOutlined, MessageOutlined, PushpinOutlined } from '@ant-design/icons';
+import { SearchOutlined, PlusOutlined, UserOutlined, LogoutOutlined, LikeOutlined, StarOutlined, MessageOutlined, PushpinOutlined, DatabaseOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import type { Post } from '../api/posts';
 import { getPosts, togglePin } from '../api/posts';
@@ -117,6 +117,9 @@ const Home: React.FC = () => {
             <>
               <Button onClick={() => navigate('/new-post')} icon={<PlusOutlined />}>
                 发帖
+              </Button>
+              <Button onClick={() => navigate('/data')} icon={<DatabaseOutlined />}>
+                数据管理
               </Button>
               <Button onClick={() => navigate('/upload')} type="primary">
                 Excel 分析

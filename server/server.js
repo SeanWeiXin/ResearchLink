@@ -7,6 +7,7 @@ const usersRouter = require('./routes/users');
 const postsRouter = require('./routes/posts');
 const uploadsRouter = require('./routes/uploads');
 const chartsRouter = require('./routes/charts');
+const dataRouter = require('./routes/data');
 
 const app = express();
 
@@ -26,6 +27,7 @@ app.use('/api/auth', usersRouter);
 app.use('/api/posts', postsRouter);
 app.use('/api/uploads', uploadsRouter);
 app.use('/api/charts', chartsRouter);
+app.use('/api/data', dataRouter);
 
 // 主路由
 app.get('/', (req, res) => {

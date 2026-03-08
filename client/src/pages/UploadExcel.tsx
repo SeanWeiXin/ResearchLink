@@ -78,13 +78,14 @@ const UploadExcel: React.FC = () => {
     customRequest: async ({ file, onSuccess, onError }: any) => {
       setUploading(true);
       setUploadProgress(0);
+      let interval: any = null;
 
       try {
         // 模拟进度
-        const interval = setInterval(() => {
+        interval = setInterval(() => {
           setUploadProgress(prev => {
             if (prev >= 90) {
-              clearInterval(interval);
+              if (interval) clearInterval(interval);
               return 90;
             }
             return prev + 10;
@@ -93,7 +94,7 @@ const UploadExcel: React.FC = () => {
 
         const result = await uploadExcel(file as File);
         
-        clearInterval(interval);
+        if (interval) clearInterval(interval);
         setUploadProgress(100);
         
         message.success(`"${result.upload.filename}" 上传成功！`);
@@ -106,7 +107,7 @@ const UploadExcel: React.FC = () => {
 
         onSuccess?.(result);
       } catch (error: any) {
-        clearInterval(interval);
+        if (interval) clearInterval(interval);
         setUploading(false);
         setUploadProgress(0);
         

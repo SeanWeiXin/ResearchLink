@@ -15,6 +15,7 @@ import UploadList from './pages/UploadList';
 import UploadPreview from './pages/UploadPreview';
 import CreateChart from './pages/CreateChart';
 import ChartDetail from './pages/ChartDetail';
+import DataList from './pages/DataList';
 import { useAuthStore } from './store/authStore';
 
 // 管理员专用路由
@@ -115,6 +116,16 @@ const App: React.FC = () => {
               element={
                 <ProtectedRoute>
                   <ChartDetail />
+                </ProtectedRoute>
+              }
+            />
+            
+            {/* 数据管理路由 */}
+            <Route
+              path="/data"
+              element={
+                <ProtectedRoute>
+                  <DataList />
                 </ProtectedRoute>
               }
             />

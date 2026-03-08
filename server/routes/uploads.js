@@ -6,8 +6,8 @@ const fs = require('fs');
 const { authMiddleware } = require('../middleware/auth');
 const Upload = require('../models/Upload');
 const User = require('../models/User');
-const { excelAnalyzer } = require('../services/excelAnalyzer');
-const { previewGenerator } = require('../services/previewGenerator');
+const pythonExcelClient = require('../services/pythonExcelClient');
+const dataStorage = require('../services/dataStorage');
 
 // 配置文件存储
 const storage = multer.diskStorage({
@@ -48,7 +48,116 @@ const upload = multer({
     }
 });
 
-// 上传 Excel 文件
+/**
+ * 存储所有解析后的数据到服务器
+ * @param {string} username - 用户名
+ * @param {string} excelName - Excel 文件名
+ * @param {object} analysisResult - Python 解析结果
+ * @returns {object} - 存储结果
+ */
+async function storeAllData(username, excelName, analysisResult) {
+    const { sheetNames, dataColumns } = analysisResult;
+    
+    // 生成存储路径
+    const storageInfo = dataStorage.generateStoragePath(username, excelName);
+    
+    // 确保目录存在
+    dataStorage.ensureDirectoryExists(storageInfo.basePath);
+    
+    let totalSize = 0;
+    const storedFiles = [];
+    
+    // 按工作表组织数据
+    const dataBySheet = {};
+    
+    // 遍历所有数据列，按工作表分组
+    dataColumns.forEach(col => {
+        const sheetName = col.sheetName || 'default';
+        if (!dataBySheet[sheetName]) {
+            dataBySheet[sheetName] = [];
+        }
+        
+        // 将数据点转换为对象数组
+        if (col.data_points && col.data_points.length > 0) {
+            col.data_points.forEach(point => {
+                const dataObj = {
+                    date: point.date,
+                    value: point.value,
+                    column: col.display_name || col.original_name
+                };
+                dataBySheet[sheetName].push(dataObj);
+            });
+        }
+    });
+    
+    // 保存每个工作表的数据
+    for (const [sheetName, sheetData] of Object.entries(dataBySheet)) {
+        const safeSheetName = dataStorage.sanitizeFilename(sheetName);
+        const dataName = safeSheetName || 'data';
+        
+        // 保存完整数据
+        const saveResult = dataStorage.saveData(
+            sheetData,
+            path.join(storageInfo.basePath, dataName),
+            'json'
+        );
+        
+        totalSize += saveResult.fileSize;
+        storedFiles.push(saveResult);
+        
+        // 保存元数据
+        const sheetMetadata = {
+            sheetName,
+            excelName,
+            username,
+            storedAt: new Date(),
+            columns: dataColumns
+                .filter(col => col.sheetName === sheetName || !col.sheetName)
+                .map(col => ({
+                    displayName: col.display_name,
+                    originalName: col.original_name,
+                    unit: col.unit,
+                    source: col.source,
+                    frequency: col.frequency,
+                    timeRange: col.time_range,
+                    totalRows: col.total_rows
+                }))
+        };
+        
+        dataStorage.saveMetadata(
+            path.join(storageInfo.basePath, dataName),
+            sheetMetadata
+        );
+    }
+    
+    // 保存总体元数据
+    const overallMetadata = {
+        excelName,
+        username,
+        sheetNames,
+        totalColumns: dataColumns.length,
+        confidence: analysisResult.confidence,
+        storedAt: new Date(),
+        format: 'json'
+    };
+    
+    dataStorage.saveMetadata(
+        path.join(storageInfo.basePath, storageInfo.safeExcelName),
+        overallMetadata
+    );
+    
+    return {
+        success: true,
+        basePath: storageInfo.basePath,
+        safeExcelName: storageInfo.safeExcelName,
+        safeUsername: storageInfo.safeUsername,
+        totalSize,
+        storedFiles,
+        sheetCount: Object.keys(dataBySheet).length
+    };
+}
+
+// 上传 Excel 文件（使用 Python 服务解析）
 router.post('/excel', authMiddleware, upload.single('file'), async (req, res) => {
     try {
         if (!req.file) {
@@ -61,38 +170,22 @@ router.post('/excel', authMiddleware, upload.single('file'), async (req, res) =>
             return res.status(403).json({ message: '您没有上传 Excel 文件的权限' });
         }
 
-        // 读取文件并使用智能体分析
-        console.log('📊 开始分析 Excel 文件:', req.file.originalname);
-        const buffer = fs.readFileSync(req.file.path);
-        const analysisResult = await excelAnalyzer.analyze(buffer, req.file.originalname);
-        console.log('✅ 分析完成，置信度:', analysisResult.overallConfidence.toFixed(2) + '%');
+        // 读取文件
+        console.log('📊 开始上传 Excel 文件:', req.file.originalname);
+        const fileBuffer = fs.readFileSync(req.file.path);
 
-        // 转换为纯 JSON 对象（MongoDB 兼容）
-        const firstSheet = analysisResult.sheets[0];
-        const firstBlock = firstSheet?.dataBlocks[0];
-        
-        const columns = (firstBlock?.columns || []).map(col => ({
-          name: col.name,
-          type: col.type,
-          format: col.format || undefined,
-          sample: col.sample?.slice(0, 5).map(s => {
-            if (s instanceof Date) return s.toISOString();
-            if (typeof s === 'object') return JSON.stringify(s);
-            return s;
-          }) || []
-        }));
+        // 调用 Python 服务解析
+        console.log('🐍 调用 Python 服务解析...');
+        const analysisResult = await pythonExcelClient.analyzeExcel(fileBuffer, req.file.originalname);
+        console.log('✅ Python 解析完成，置信度:', analysisResult.confidence);
+        console.log('📊 数据列结构示例:', analysisResult.dataColumns[0]);
 
-        const dataBlocks = (firstSheet?.dataBlocks || []).map(b => ({
-          blockId: b.blockId,
-          blockName: b.blockName || undefined,
-          startRow: b.startRow,
-          endRow: b.endRow,
-          rowCount: b.data.length
-        }));
+        // 自动存储所有数据到服务器
+        console.log('💾 开始存储数据到服务器...');
+        const storageResult = await storeAllData(user.username, req.file.originalname, analysisResult);
+        console.log('✅ 数据存储完成:', storageResult);
 
-        const previewRows = previewGenerator.generateFromAnalysis(firstSheet, 0, 20)?.previewData || [];
-
-        // 创建上传记录（包含智能分析结果）
+        // 创建上传记录
         const upload = new Upload({
             user: req.user.userId,
             filename: req.file.filename,
@@ -101,19 +194,43 @@ router.post('/excel', authMiddleware, upload.single('file'), async (req, res) =>
             size: req.file.size,
             mimeType: req.file.mimetype,
             status: 'processed',
+            dataStoragePath: storageResult.basePath,
+            storageMetadata: {
+                username: user.username,
+                excelName: storageResult.safeExcelName,
+                dataName: storageResult.safeExcelName,
+                storageFormat: 'json',
+                storedAt: new Date(),
+                fileSize: storageResult.totalSize
+            },
+            isVerified: false,
             metadata: {
-                // 使用第一个工作表的第一个数据块
-                rowCount: firstBlock?.data.length || 0,
-                columnCount: firstBlock?.columns.length || 0,
-                sheetNames: analysisResult.sheets.map(s => s.sheetName),
-                columns: columns,
-                dataType: firstSheet?.dataType,
-                confidence: analysisResult.overallConfidence,
-                dataBlocks: dataBlocks,
-                // 生成预览数据（前 20 行）
-                previewRows: previewRows,
-                // 警告信息
-                warnings: firstSheet?.warnings || []
+                // Python ETL 格式
+                sheetNames: analysisResult.sheetNames,
+                dataColumns: analysisResult.dataColumns.map(col => ({
+                    columnIndex: col.column_index,
+                    sheetName: col.sheet_name, // 添加工作表名称
+                    originalName: col.original_name,
+                    displayName: col.display_name,
+                    unit: col.unit,
+                    source: col.source,
+                    frequency: col.frequency,
+                    timeRange: col.time_range,
+                    previewRows: col.preview_rows || [],
+                    totalRows: col.total_rows,
+                    selected: true
+                })),
+                pythonAnalysis: analysisResult.pythonAnalysis,
+                confidence: analysisResult.confidence,
+                
+                // 兼容旧格式
+                rowCount: analysisResult.dataColumns[0]?.total_rows || 0,
+                columnCount: analysisResult.totalColumns,
+                columns: analysisResult.dataColumns.map(col => ({
+                    name: col.display_name || col.displayName || 'Unknown',
+                    type: 'number',
+                    detectedType: 'number'
+                })),
             }
         });
 
@@ -133,14 +250,21 @@ router.post('/excel', authMiddleware, upload.single('file'), async (req, res) =>
                 size: upload.size,
                 status: upload.status,
                 createdAt: upload.createdAt,
+                isVerified: upload.isVerified,
+                dataStoragePath: upload.dataStoragePath,
                 metadata: {
-                    rowCount: upload.metadata.rowCount,
-                    columnCount: upload.metadata.columnCount,
                     sheetNames: upload.metadata.sheetNames,
-                    columns: upload.metadata.columns,
-                    dataType: upload.metadata.dataType,
+                    totalColumns: upload.metadata.columnCount,
                     confidence: upload.metadata.confidence,
-                    warnings: upload.metadata.warnings
+                    dataColumns: upload.metadata.dataColumns.map(col => ({
+                        columnIndex: col.columnIndex,
+                        displayName: col.displayName,
+                        unit: col.unit,
+                        source: col.source,
+                        frequency: col.frequency,
+                        previewRows: col.previewRows,
+                        selected: col.selected
+                    }))
                 }
             }
         });
@@ -206,6 +330,19 @@ router.get('/:id', authMiddleware, async (req, res) => {
             return res.status(403).json({ message: '无权限访问' });
         }
 
+        // 调试：检查 dataColumns 的 sheetName 字段
+        if (upload.metadata?.dataColumns?.length > 0) {
+            console.log('📊 [原始] MongoDB 返回数据列示例:', {
+                totalColumns: upload.metadata.dataColumns.length,
+                firstColumn: upload.metadata.dataColumns[0],
+                hasSheetName: upload.metadata.dataColumns.some(col => col.sheetName || col.sheet_name)
+            });
+            
+            // 检查是否是 Mongoose 文档对象
+            console.log('📊 [类型] 是否为 Mongoose 文档:', upload.constructor.name);
+            console.log('📊 [类型] metadata 类型:', upload.metadata?.constructor?.name);
+        }
+
         res.json(upload);
     } catch (err) {
         console.error('获取文件详情错误:', err);
@@ -213,7 +350,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
     }
 });
 
-// 更新文件处理配置
+// 更新处理配置
 router.put('/:id/config', authMiddleware, async (req, res) => {
     try {
         const upload = await Upload.findById(req.params.id);
@@ -226,12 +363,20 @@ router.put('/:id/config', authMiddleware, async (req, res) => {
             return res.status(403).json({ message: '无权限修改' });
         }
 
-        const { processingConfig } = req.body;
+        const { processingConfig, isVerified, metadata } = req.body;
+
         if (processingConfig) {
             upload.processingConfig = processingConfig;
         }
 
-        upload.status = 'processed';
+        if (isVerified !== undefined) {
+            upload.isVerified = isVerified;
+        }
+
+        if (metadata) {
+            upload.metadata = { ...upload.metadata, ...metadata };
+        }
+
         await upload.save();
 
         res.json({
@@ -286,18 +431,25 @@ router.delete('/:id', authMiddleware, async (req, res) => {
             return res.status(404).json({ message: '文件不存在' });
         }
 
-        if (upload.user.toString() !== req.user.userId) {
+        // 检查权限：只有所有者或管理员可以删除
+        const user = await User.findById(req.user.userId);
+        const isOwner = upload.user.toString() === req.user.userId;
+        const isAdmin = user?.role === 'admin';
+
+        if (!isOwner && !isAdmin) {
             return res.status(403).json({ message: '无权限删除' });
         }
 
-        // 删除文件
-        if (fs.existsSync(upload.path)) {
-            fs.unlinkSync(upload.path);
+        // 删除存储的数据文件
+        if (upload.dataStoragePath && fs.existsSync(upload.dataStoragePath)) {
+            fs.rmSync(upload.dataStoragePath, { recursive: true, force: true });
+            console.log('🗑️ 已删除存储数据:', upload.dataStoragePath);
         }
 
+        // 删除上传记录
         await Upload.findByIdAndDelete(req.params.id);
 
-        // 更新用户
+        // 更新用户的上传列表
         await User.findByIdAndUpdate(req.user.userId, {
             $pull: { uploads: upload._id }
         });

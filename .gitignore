@@ -48,3 +48,22 @@ coverage/
 tmp/
 temp/
 .cache/
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Test files (keep only samples)
+server/test*.js
+server/data/
+!server/test_files/
+
+# Development
+*.orig
+*.bak

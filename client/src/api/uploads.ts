@@ -20,12 +20,15 @@ export interface Upload {
     confidence?: number;
     previewRows?: any[];
     warnings?: string[];
-    dataBlocks?: Array<{
-      blockId: string;
-      blockName?: string;
-      startRow: number;
-      endRow: number;
-      rowCount: number;
+    dataColumns?: Array<{
+      columnIndex: number;
+      displayName: string;
+      originalName: string;
+      unit?: string;
+      source?: string;
+      frequency?: string;
+      previewRows?: Array<{ date: string; value: number }>;
+      totalRows?: number;
     }>;
   };
   processingConfig?: {
@@ -84,6 +87,8 @@ export const updateUploadConfig = async (
       dateColumn?: string;
       dataColumns?: string[];
     };
+    isVerified?: boolean;
+    metadata?: any;
   }
 ): Promise<{ message: string; upload: Upload }> => {
   const response = await apiClient.put(`/uploads/${uploadId}/config`, config);
@@ -101,56 +106,115 @@ export interface Chart {
   id: string;
   title: string;
   description?: string;
-  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'pie';
-  config: {
-    xField?: string;
-    yFields?: string[];
-    seriesField?: string;
-    color?: string[];
-  };
-  echartsOption?: any;
-  user?: {
-    username: string;
-    avatar?: string;
-  };
-  upload?: {
-    originalName: string;
-  };
+  chartType: string;
+  config: any;
+  thumbnail?: string;
+  upload: string;
+  createdBy: string;
   isPublic: boolean;
-  views: number;
-  publishedPosts?: any[];
   createdAt: string;
 }
 
-export interface ChartsResponse {
-  charts: Chart[];
+// 数据管理 API
+export interface DataItem {
+  id: string;
+  excelName: string;
+  sheetNames: string[];
+  columns: Array<{
+    displayName: string;
+    unit?: string;
+    source?: string;
+    frequency?: string;
+    totalRows?: number;
+  }>;
+  totalColumns: number;
+  totalRows: number;
+  storagePath?: string;
+  isVerified: boolean;
+  createdAt: string;
+}
+
+export interface DataListResponse {
+  data: DataItem[];
   pagination: {
     currentPage: number;
     totalPages: number;
-    totalCharts: number;
+    totalItems: number;
   };
 }
 
+// 获取用户的数据列表
+export const getMyData = async (params?: {
+  page?: number;
+  limit?: number;
+  search?: string;
+}): Promise<DataListResponse> => {
+  const response = await apiClient.get('/data/my-data', { params });
+  return response.data;
+};
+
+// 获取数据详情
+export const getData = async (dataId: string): Promise<any> => {
+  const response = await apiClient.get(`/data/${dataId}`);
+  return response.data;
+};
+
+// 获取数据预览
+export const getDataPreview = async (
+  dataId: string,
+  params?: { sheetName?: string; limit?: number }
+): Promise<any> => {
+  const response = await apiClient.get(`/data/${dataId}/preview`, { params });
+  return response.data;
+};
+
+// 更新元数据
+export const updateMetadata = async (
+  dataId: string,
+  metadata: {
+    columns?: Array<{
+      columnIndex: number;
+      displayName?: string;
+      unit?: string;
+      source?: string;
+      frequency?: string;
+    }>;
+  }
+): Promise<any> => {
+  const response = await apiClient.put(`/data/${dataId}/metadata`, metadata);
+  return response.data;
+};
+
+// 删除数据
+export const deleteData = async (dataId: string): Promise<{ message: string }> => {
+  const response = await apiClient.delete(`/data/${dataId}`);
+  return response.data;
+};
+
 // 创建图表
-export const createChart = async (data: {
-  uploadId: string;
-  title: string;
-  description?: string;
-  chartType: string;
-  config: any;
-  echartsOption?: any;
-}): Promise<Chart> => {
-  const response = await apiClient.post('/charts', data);
+export const createChart = async (
+  uploadId: string,
+  chartData: {
+    title: string;
+    description?: string;
+    chartType: string;
+    config: any;
+    isPublic?: boolean;
+  }
+): Promise<any> => {
+  const response = await apiClient.post('/charts', {
+    upload: uploadId,
+    ...chartData
+  });
   return response.data;
 };
 
 // 获取图表列表
 export const getCharts = async (params?: {
-  userId?: string;
-  isPublic?: boolean;
   page?: number;
   limit?: number;
-}): Promise<ChartsResponse> => {
+  uploadId?: string;
+}): Promise<{ charts: Chart[]; pagination: any }> => {
   const response = await apiClient.get('/charts', { params });
   return response.data;
 };
@@ -164,14 +228,14 @@ export const getChart = async (chartId: string): Promise<Chart> => {
 // 更新图表
 export const updateChart = async (
   chartId: string,
-  data: {
+  updates: {
     title?: string;
     description?: string;
     config?: any;
-    echartsOption?: any;
+    isPublic?: boolean;
   }
-): Promise<Chart> => {
-  const response = await apiClient.put(`/charts/${chartId}`, data);
+): Promise<any> => {
+  const response = await apiClient.put(`/charts/${chartId}`, updates);
   return response.data;
 };
 
@@ -184,17 +248,11 @@ export const deleteChart = async (chartId: string): Promise<{ message: string }>
 // 发布图表到帖子
 export const publishChartToPost = async (
   chartId: string,
-  postId: string
-): Promise<{ message: string; post: any }> => {
-  const response = await apiClient.post(`/charts/${chartId}/publish`, { postId });
-  return response.data;
-};
-
-// 设置图表可见性
-export const setChartVisibility = async (
-  chartId: string,
-  isPublic: boolean
-): Promise<{ message: string; isPublic: boolean }> => {
-  const response = await apiClient.put(`/charts/${chartId}/visibility`, { isPublic });
+  postData?: {
+    title?: string;
+    content?: string;
+  }
+): Promise<any> => {
+  const response = await apiClient.post(`/charts/${chartId}/publish`, postData);
   return response.data;
 };
