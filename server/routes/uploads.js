@@ -6,6 +6,8 @@ const fs = require('fs');
 const { authMiddleware } = require('../middleware/auth');
 const Upload = require('../models/Upload');
 const User = require('../models/User');
+const { excelAnalyzer } = require('../services/excelAnalyzer');
+const { previewGenerator } = require('../services/previewGenerator');
 
 // 配置文件存储
 const storage = multer.diskStorage({
@@ -59,7 +61,38 @@ router.post('/excel', authMiddleware, upload.single('file'), async (req, res) =>
             return res.status(403).json({ message: '您没有上传 Excel 文件的权限' });
         }
 
-        // 创建上传记录
+        // 读取文件并使用智能体分析
+        console.log('📊 开始分析 Excel 文件:', req.file.originalname);
+        const buffer = fs.readFileSync(req.file.path);
+        const analysisResult = await excelAnalyzer.analyze(buffer, req.file.originalname);
+        console.log('✅ 分析完成，置信度:', analysisResult.overallConfidence.toFixed(2) + '%');
+
+        // 转换为纯 JSON 对象（MongoDB 兼容）
+        const firstSheet = analysisResult.sheets[0];
+        const firstBlock = firstSheet?.dataBlocks[0];
+        
+        const columns = (firstBlock?.columns || []).map(col => ({
+          name: col.name,
+          type: col.type,
+          format: col.format || undefined,
+          sample: col.sample?.slice(0, 5).map(s => {
+            if (s instanceof Date) return s.toISOString();
+            if (typeof s === 'object') return JSON.stringify(s);
+            return s;
+          }) || []
+        }));
+
+        const dataBlocks = (firstSheet?.dataBlocks || []).map(b => ({
+          blockId: b.blockId,
+          blockName: b.blockName || undefined,
+          startRow: b.startRow,
+          endRow: b.endRow,
+          rowCount: b.data.length
+        }));
+
+        const previewRows = previewGenerator.generateFromAnalysis(firstSheet, 0, 20)?.previewData || [];
+
+        // 创建上传记录（包含智能分析结果）
         const upload = new Upload({
             user: req.user.userId,
             filename: req.file.filename,
@@ -67,7 +100,21 @@ router.post('/excel', authMiddleware, upload.single('file'), async (req, res) =>
             path: req.file.path,
             size: req.file.size,
             mimeType: req.file.mimetype,
-            status: 'uploaded'
+            status: 'processed',
+            metadata: {
+                // 使用第一个工作表的第一个数据块
+                rowCount: firstBlock?.data.length || 0,
+                columnCount: firstBlock?.columns.length || 0,
+                sheetNames: analysisResult.sheets.map(s => s.sheetName),
+                columns: columns,
+                dataType: firstSheet?.dataType,
+                confidence: analysisResult.overallConfidence,
+                dataBlocks: dataBlocks,
+                // 生成预览数据（前 20 行）
+                previewRows: previewRows,
+                // 警告信息
+                warnings: firstSheet?.warnings || []
+            }
         });
 
         await upload.save();
@@ -76,19 +123,33 @@ router.post('/excel', authMiddleware, upload.single('file'), async (req, res) =>
         user.uploads.push(upload._id);
         await user.save();
 
+        console.log('💾 上传记录已保存');
+
         res.status(201).json({
-            message: '上传成功',
+            message: '上传并解析成功',
             upload: {
                 id: upload._id,
                 filename: upload.originalName,
                 size: upload.size,
                 status: upload.status,
-                createdAt: upload.createdAt
+                createdAt: upload.createdAt,
+                metadata: {
+                    rowCount: upload.metadata.rowCount,
+                    columnCount: upload.metadata.columnCount,
+                    sheetNames: upload.metadata.sheetNames,
+                    columns: upload.metadata.columns,
+                    dataType: upload.metadata.dataType,
+                    confidence: upload.metadata.confidence,
+                    warnings: upload.metadata.warnings
+                }
             }
         });
     } catch (err) {
-        console.error('上传文件错误:', err);
-        res.status(500).json({ message: '上传失败：' + err.message });
+        console.error('❌ 上传文件错误:', err);
+        res.status(500).json({ 
+            message: '上传失败：' + err.message,
+            error: err.message
+        });
     }
 });
 

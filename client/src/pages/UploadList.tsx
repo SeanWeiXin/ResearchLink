@@ -40,11 +40,18 @@ const UploadList: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
+    if (!id) {
+      message.error('无效的上传 ID');
+      return;
+    }
+    
     try {
+      console.log('删除上传:', id);
       await deleteUpload(id);
       message.success('删除成功');
       loadUploads();
     } catch (error: any) {
+      console.error('删除失败:', error);
       message.error(error.response?.data?.message || '删除失败');
     }
   };
@@ -118,37 +125,40 @@ const UploadList: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      render: (_: any, record: Upload) => (
-        <Space size="small">
-          <Button
-            type="link"
-            size="small"
-            icon={<EyeOutlined />}
-            onClick={() => navigate(`/uploads/${record.id}/preview`)}
-            disabled={record.status !== 'processed' && record.status !== 'uploaded'}
-          >
-            预览
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            onClick={() => navigate(`/uploads/create-chart?uploadId=${record.id}`)}
-            disabled={record.status !== 'processed'}
-          >
-            创建图表
-          </Button>
-          <Popconfirm
-            title="确定要删除吗？"
-            onConfirm={() => handleDelete(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button type="link" size="small" danger icon={<DeleteOutlined />}>
-              删除
+      render: (_: any, record: Upload) => {
+        const uploadId = record.id || (record as any)._id;
+        return (
+          <Space size="small">
+            <Button
+              type="link"
+              size="small"
+              icon={<EyeOutlined />}
+              onClick={() => navigate(`/uploads/${uploadId}/preview`)}
+              disabled={record.status !== 'processed' && record.status !== 'uploaded'}
+            >
+              预览
             </Button>
-          </Popconfirm>
-        </Space>
-      ),
+            <Button
+              type="link"
+              size="small"
+              onClick={() => navigate(`/uploads/create-chart?uploadId=${uploadId}`)}
+              disabled={record.status !== 'processed'}
+            >
+              创建图表
+            </Button>
+            <Popconfirm
+              title="确定要删除吗？"
+              onConfirm={() => handleDelete(uploadId)}
+              okText="确定"
+              cancelText="取消"
+            >
+              <Button type="link" size="small" danger icon={<DeleteOutlined />}>
+                删除
+              </Button>
+            </Popconfirm>
+          </Space>
+        );
+      },
     },
   ];
 

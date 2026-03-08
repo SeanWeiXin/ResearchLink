@@ -10,10 +10,23 @@ export interface Upload {
     sheetNames?: string[];
     columns?: Array<{
       name: string;
-      type: 'date' | 'number' | 'string';
+      type: 'date' | 'number' | 'string' | 'boolean' | 'unknown';
+      format?: string;
       sample?: any;
     }>;
     rowCount?: number;
+    columnCount?: number;
+    dataType?: 'time_series' | 'panel_data' | 'cross_section' | 'custom';
+    confidence?: number;
+    previewRows?: any[];
+    warnings?: string[];
+    dataBlocks?: Array<{
+      blockId: string;
+      blockName?: string;
+      startRow: number;
+      endRow: number;
+      rowCount: number;
+    }>;
   };
   processingConfig?: {
     sheetName?: string;

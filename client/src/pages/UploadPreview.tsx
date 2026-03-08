@@ -48,14 +48,24 @@ const UploadPreview: React.FC = () => {
     
     setSaving(true);
     try {
+      // 自动设置 X 轴和 Y 轴
+      const processingConfig = {
+        sheetName: values.sheetName,
+        dateColumn: values.dateColumn,
+        dataColumns: values.dataColumns,
+        // 自动设置 X 轴和 Y 轴（用于图表）
+        xAxis: values.dateColumn || values.dataColumns?.[0],
+        yAxis: values.dataColumns
+      };
+      
       await updateUploadConfig(uploadId, {
-        processingConfig: values
+        processingConfig
       });
       
-      message.success('配置保存成功！');
+      message.success('配置保存成功！系统已自动设置 X 轴和 Y 轴。');
       setUpload(prev => prev ? {
         ...prev,
-        processingConfig: values,
+        processingConfig,
         status: 'processed'
       } : null);
     } catch (error: any) {
@@ -88,9 +98,14 @@ const UploadPreview: React.FC = () => {
       <div>
         <Text strong>{col.name}</Text>
         <br />
-        <Tag color={col.type === 'date' ? 'blue' : col.type === 'number' ? 'green' : 'default'} style={{ marginTop: 4 }}>
-          {col.type === 'date' ? '日期' : col.type === 'number' ? '数值' : '文本'}
+        <Tag color={col.type === 'date' ? 'blue' : col.type === 'number' ? 'green' : col.type === 'string' ? 'orange' : 'default'} style={{ marginTop: 4 }}>
+          {col.type === 'date' ? '日期' : col.type === 'number' ? '数值' : col.type === 'string' ? '文本' : '其他'}
         </Tag>
+        {col.format && (
+          <Tag color="purple" style={{ marginTop: 4, fontSize: 10 }}>
+            {col.format}
+          </Tag>
+        )}
       </div>
     ),
     dataIndex: col.name,
@@ -102,6 +117,9 @@ const UploadPreview: React.FC = () => {
       return String(value);
     },
   })) || [];
+
+  // 使用实际的预览数据
+  const previewData = upload?.metadata?.previewRows || [];
 
   return (
     <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
@@ -195,13 +213,24 @@ const UploadPreview: React.FC = () => {
             }
             style={{ marginBottom: 20 }}
           >
-            <Alert
-              type="info"
-              message="配置说明"
-              description="请选择日期列和要分析的数值列。这些配置将用于生成图表。"
-              showIcon
-              style={{ marginBottom: 20 }}
-            />
+            {/* 显示数据结构类型 */}
+            {upload?.metadata?.dataType && (
+              <Alert
+                type="success"
+                message={`数据结构类型：${
+                  upload.metadata.dataType === 'time_series' ? '时间序列数据' :
+                  upload.metadata.dataType === 'panel_data' ? '面板数据（多维度）' :
+                  upload.metadata.dataType === 'cross_section' ? '截面数据' : '自定义结构'
+                }`}
+                description={
+                  upload.metadata.dataType === 'time_series' ? '单一维度随时间变化的数据，适合直接生成时间序列图表' :
+                  upload.metadata.dataType === 'panel_data' ? '包含多个维度和时间维度，建议进行数据转换（unpivot）' :
+                  upload.metadata.dataType === 'cross_section' ? '单一时间点的多维度数据对比' : '需要根据具体数据结构进行配置'
+                }
+                showIcon
+                style={{ marginBottom: 20 }}
+              />
+            )}
 
             <Form
               form={form}
@@ -227,30 +256,49 @@ const UploadPreview: React.FC = () => {
                   </Form.Item>
                 )}
 
-                {/* 日期列选择 */}
+                {/* 日期列选择 - 智能推荐 */}
                 <Form.Item
                   name="dateColumn"
                   label="日期/时间列"
-                  rules={[{ required: true, message: '请选择日期列' }]}
-                  tooltip="用于 X 轴的时间或日期数据"
+                  rules={[{ required: false, message: '请选择日期列（可选）' }]}
+                  tooltip="用于 X 轴的时间或日期数据。系统已自动识别日期类型的列"
+                  extra={
+                    <Space style={{ fontSize: 12, color: '#666' }}>
+                      <span>💡 智能推荐：</span>
+                      {upload?.metadata?.columns?.filter(col => col.type === 'date' || col.format === 'M 月').map(col => (
+                        <Tag key={col.name} color="blue">{col.name}</Tag>
+                      ))}
+                      {(!upload?.metadata?.columns || upload.metadata.columns.filter(col => col.type === 'date' || col.format === 'M 月').length === 0) && (
+                        <span>未检测到日期列</span>
+                      )}
+                    </Space>
+                  }
                 >
-                  <Select placeholder="选择作为时间轴的列" allowClear>
+                  <Select placeholder="选择作为时间轴的列（可选）" allowClear>
                     {upload?.metadata?.columns
-                      ?.filter(col => col.type === 'date' || col.type === 'string')
+                      ?.filter(col => col.type === 'date' || col.type === 'string' || col.format === 'M 月')
                       .map((col, i) => (
                         <Option key={i} value={col.name}>
-                          {col.name} ({col.type === 'date' ? '日期' : '文本'})
+                          {col.name} ({col.type === 'date' || col.format === 'M 月' ? '日期' : '文本'})
                         </Option>
                       ))}
                   </Select>
                 </Form.Item>
 
-                {/* 数值列选择 */}
+                {/* 数值列选择 - 智能推荐 */}
                 <Form.Item
                   name="dataColumns"
                   label="数值列"
                   rules={[{ required: true, message: '请至少选择一个数值列' }]}
                   tooltip="要分析和可视化的数据列"
+                  extra={
+                    <Space style={{ fontSize: 12, color: '#666' }}>
+                      <span>💡 智能推荐：</span>
+                      {upload?.metadata?.columns?.filter(col => col.type === 'number').map(col => (
+                        <Tag key={col.name} color="green">{col.name}</Tag>
+                      ))}
+                    </Space>
+                  }
                 >
                   <Select
                     mode="multiple"
@@ -271,16 +319,25 @@ const UploadPreview: React.FC = () => {
           </Card>
 
           {/* 数据预览 */}
-          <Card title="数据预览（前 10 行）">
+          <Card title="数据预览（前 20 行）">
             {upload?.metadata?.columns && upload.metadata.columns.length > 0 ? (
-              <Table
-                columns={columns}
-                dataSource={[]}
-                scroll={{ x: true }}
-                pagination={false}
-                size="small"
-                locale={{ emptyText: '数据预览功能开发中...' }}
-              />
+              previewData.length > 0 ? (
+                <Table
+                  columns={columns}
+                  dataSource={previewData}
+                  scroll={{ x: true }}
+                  pagination={false}
+                  size="small"
+                  locale={{ emptyText: '暂无数据' }}
+                />
+              ) : (
+                <Alert
+                  type="warning"
+                  message="暂无预览数据"
+                  description="数据可能正在处理中，或文件格式较为复杂，请稍后刷新页面"
+                  showIcon
+                />
+              )
             ) : (
               <Alert
                 type="warning"
@@ -288,6 +345,44 @@ const UploadPreview: React.FC = () => {
                 description="数据正在处理中，请稍后刷新页面"
                 showIcon
               />
+            )}
+            
+            {/* 显示警告信息 */}
+            {upload?.metadata?.warnings && upload.metadata.warnings.length > 0 && (
+              <Alert
+                type="warning"
+                message="数据警告"
+                description={
+                  <ul style={{ margin: 0, paddingLeft: 20 }}>
+                    {upload.metadata.warnings.map((warning, idx) => (
+                      <li key={idx}>{warning}</li>
+                    ))}
+                  </ul>
+                }
+                showIcon
+                style={{ marginTop: 16 }}
+              />
+            )}
+            
+            {/* 显示置信度 */}
+            {upload?.metadata?.confidence && (
+              <Card 
+                size="small" 
+                title="📊 分析置信度" 
+                style={{ marginTop: 16 }}
+                bordered={false}
+              >
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 32, fontWeight: 'bold', color: upload.metadata.confidence >= 80 ? '#52c41a' : upload.metadata.confidence >= 50 ? '#faad14' : '#ff4d4f' }}>
+                    {upload.metadata.confidence.toFixed(1)}%
+                  </div>
+                  <div style={{ color: '#666', marginTop: 8 }}>
+                    {upload.metadata.confidence >= 80 ? '高置信度 - 数据质量良好' : 
+                     upload.metadata.confidence >= 50 ? '中等置信度 - 建议检查数据' : 
+                     '低置信度 - 需要人工校正'}
+                  </div>
+                </div>
+              </Card>
             )}
           </Card>
 
