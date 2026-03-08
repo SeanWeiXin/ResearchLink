@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, List, Card, Tag, Input, Select, Button, Space, Typography, message, Avatar, Empty, Dropdown, Menu } from 'antd';
-import { SearchOutlined, PlusOutlined, UserOutlined, LogoutOutlined } from '@ant-design/icons';
+import { Layout, Card, Tag, Input, Select, Button, Space, Typography, message, Avatar, Empty, Dropdown, Menu, Row, Col, Popconfirm, Divider } from 'antd';
+import { SearchOutlined, PlusOutlined, UserOutlined, LogoutOutlined, LikeOutlined, StarOutlined, MessageOutlined, PushpinOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import type { Post } from '../api/posts';
-import { getPosts } from '../api/posts';
+import { getPosts, togglePin } from '../api/posts';
 import { useAuthStore } from '../store/authStore';
 
 const { Header, Content } = Layout;
-const { Title, Text } = Typography;
+const { Title, Text, Paragraph } = Typography;
 const { Option } = Select;
 
 const Home: React.FC = () => {
@@ -15,6 +15,7 @@ const Home: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
+  const [sortBy, setSortBy] = useState('isPinned');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const navigate = useNavigate();
@@ -22,7 +23,7 @@ const Home: React.FC = () => {
 
   useEffect(() => {
     loadPosts();
-  }, [category, page]);
+  }, [category, sortBy, page]);
 
   const loadPosts = async () => {
     setLoading(true);
@@ -31,7 +32,9 @@ const Home: React.FC = () => {
         category: category !== 'all' ? category : undefined,
         search: search || undefined,
         page,
-        limit: 10
+        limit: 20,
+        sortBy,
+        order: 'desc'
       });
       setPosts(response.posts);
       setTotal(response.pagination.totalPosts);
@@ -56,37 +59,23 @@ const Home: React.FC = () => {
     navigate('/');
   };
 
+  const handlePin = async (e: React.MouseEvent, postId: string, currentPinned: boolean) => {
+    e.stopPropagation();
+    try {
+      await togglePin(postId, !currentPinned);
+      message.success(currentPinned ? '已取消置顶' : '已置顶');
+      loadPosts();
+    } catch (error: any) {
+      message.error(error.response?.data?.message || '操作失败');
+    }
+  };
+
   const userMenuItems = [
     {
       key: 'profile',
       icon: <UserOutlined />,
       label: '个人中心',
       onClick: () => navigate('/profile'),
-    },
-    {
-      type: 'divider' as const,
-    },
-    {
-      key: 'uploads',
-      icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>,
-      label: '我的上传',
-      onClick: () => navigate('/uploads'),
-    },
-    {
-      type: 'divider' as const,
-    },
-    {
-      key: 'permissions',
-      icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>,
-      label: '权限管理',
-      onClick: () => navigate('/quick-admin'),
-    },
-    {
-      key: 'admin',
-      icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/></svg>,
-      label: '管理后台',
-      onClick: () => navigate('/admin'),
-      disabled: user?.role !== 'admin',
     },
     {
       type: 'divider' as const,
@@ -99,6 +88,8 @@ const Home: React.FC = () => {
       danger: true,
     },
   ];
+
+  const isMaintainer = user?.role === 'admin';
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -150,22 +141,46 @@ const Home: React.FC = () => {
       </Header>
 
       <Content style={{ padding: '50px', background: '#f0f2f5' }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-          <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Title level={2}>最新讨论</Title>
-            <Select
-              value={category}
-              onChange={setCategory}
-              style={{ width: 150 }}
-            >
-              <Option value="all">全部</Option>
-              <Option value="blog">博客</Option>
-              <Option value="user">分享</Option>
-              <Option value="question">提问</Option>
-              <Option value="share">资源</Option>
-            </Select>
+        <div style={{ maxWidth: 1400, margin: '0 auto' }}>
+          {/* 标题和筛选栏 */}
+          <div style={{ 
+            marginBottom: 20, 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '12px'
+          }}>
+            <Title level={2} style={{ margin: 0 }}>最新讨论</Title>
+            <Space wrap>
+              <Select
+                value={category}
+                onChange={setCategory}
+                style={{ width: 120 }}
+                placeholder="分类"
+              >
+                <Option value="all">全部</Option>
+                <Option value="blog">博客</Option>
+                <Option value="user">分享</Option>
+                <Option value="question">提问</Option>
+                <Option value="share">资源</Option>
+              </Select>
+              <Select
+                value={sortBy}
+                onChange={setSortBy}
+                style={{ width: 120 }}
+                placeholder="排序"
+              >
+                <Option value="isPinned">默认</Option>
+                <Option value="likes">点赞最多</Option>
+                <Option value="favorites">收藏最多</Option>
+                <Option value="createdAt">最新发布</Option>
+                <Option value="views">浏览最多</Option>
+              </Select>
+            </Space>
           </div>
 
+          {/* 帖子列表 - 响应式多列布局 */}
           {posts.length === 0 && !loading ? (
             <div style={{ 
               textAlign: 'center', 
@@ -187,51 +202,123 @@ const Home: React.FC = () => {
               )}
             </div>
           ) : (
-            <List
-              loading={loading}
-              itemLayout="vertical"
-              dataSource={posts}
-              pagination={{
-                current: page,
-                pageSize: 10,
-                total: total,
-                onChange: (p) => setPage(p)
-              }}
-              renderItem={(post) => (
-                <List.Item>
+            <Row gutter={[16, 16]}>
+              {posts.map((post) => (
+                <Col xs={24} sm={12} md={12} lg={8} xl={6} key={post._id}>
                   <Card
                     hoverable
                     onClick={() => navigate(`/post/${post._id}`)}
-                    style={{ width: '100%' }}
+                    style={{ 
+                      height: '100%',
+                      position: 'relative',
+                      borderTop: post.isPinned ? '3px solid #ff4d4f' : 'none'
+                    }}
+                    cover={
+                      <div 
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ padding: '16px' }}
+                      >
+                        <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+                          <Space>
+                            <Avatar src={post.author?.avatar || undefined} size={40}>
+                              {post.author?.username[0]}
+                            </Avatar>
+                            <Text strong style={{ fontSize: 14 }}>{post.author?.username}</Text>
+                          </Space>
+                          {isMaintainer && (
+                            <Popconfirm
+                              title={post.isPinned ? "确定取消置顶吗？" : "确定置顶吗？"}
+                              onConfirm={(e: any) => handlePin(e, post._id, post.isPinned)}
+                              okText="确定"
+                              cancelText="取消"
+                            >
+                              <Button
+                                type="text"
+                                icon={<PushpinOutlined style={{ 
+                                  color: post.isPinned ? '#ff4d4f' : '#999',
+                                  transform: post.isPinned ? 'rotate(0deg)' : 'rotate(45deg)'
+                                }} />}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            </Popconfirm>
+                          )}
+                        </Space>
+                      </div>
+                    }
                   >
                     <Card.Meta
-                      avatar={<Avatar src={post.author?.avatar || undefined} size={50}>{post.author?.username[0]}</Avatar>}
-                      title={<Text style={{ fontSize: 18, fontWeight: 'bold' }}>{post.title}</Text>}
+                      title={
+                        <Space wrap style={{ width: '100%' }}>
+                          {post.isPinned && <Tag color="red">置顶</Tag>}
+                          <Tag color="blue">{post.category}</Tag>
+                          <Text ellipsis style={{ maxWidth: 200, fontSize: 15, fontWeight: 'bold' }}>
+                            {post.title}
+                          </Text>
+                        </Space>
+                      }
                       description={
                         <div>
-                          <Space style={{ marginBottom: 10 }}>
-                            <Tag color="blue">{post.category}</Tag>
-                            {post.tags?.map(tag => (
-                              <Tag key={tag}>{tag}</Tag>
-                            ))}
-                          </Space>
-                          <div style={{ color: '#666', marginBottom: 10 }}>
-                            {post.content.substring(0, 200)}...
-                          </div>
-                          <Space>
-                            <Text type="secondary">👤 {post.author?.username}</Text>
-                            <Text type="secondary">👁️ {post.views}</Text>
-                            <Text type="secondary">❤️ {post.likes?.length || 0}</Text>
-                            <Text type="secondary">⭐ {post.favorites?.length || 0}</Text>
-                            <Text type="secondary">💬 {post.comments?.length || 0}</Text>
+                          {post.tags?.slice(0, 3).map(tag => (
+                            <Tag key={tag} style={{ marginBottom: 4 }}>{tag}</Tag>
+                          ))}
+                          <Paragraph
+                            ellipsis={{ rows: 2 }}
+                            style={{ 
+                              color: '#666', 
+                              fontSize: 13,
+                              margin: '8px 0',
+                              height: 44
+                            }}
+                          >
+                            {post.content}
+                          </Paragraph>
+                          <Divider style={{ margin: '8px 0' }} />
+                          <Space wrap size="small">
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                              <LikeOutlined /> {post.likes?.length || 0}
+                            </Text>
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                              <StarOutlined /> {post.favorites?.length || 0}
+                            </Text>
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                              <MessageOutlined /> {post.comments?.length || 0}
+                            </Text>
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                              👁️ {post.views}
+                            </Text>
                           </Space>
                         </div>
                       }
                     />
                   </Card>
-                </List.Item>
-              )}
-            />
+                </Col>
+              ))}
+            </Row>
+          )}
+
+          {/* 分页 */}
+          {posts.length > 0 && (
+            <div style={{ 
+              textAlign: 'center', 
+              marginTop: 30,
+              padding: '20px 0'
+            }}>
+              <Button 
+                disabled={page === 1}
+                onClick={() => setPage(page - 1)}
+                style={{ marginRight: 10 }}
+              >
+                上一页
+              </Button>
+              <Text>第 {page} 页 / 共 {Math.ceil(total / 20)} 页</Text>
+              <Button 
+                disabled={page >= Math.ceil(total / 20)}
+                onClick={() => setPage(page + 1)}
+                style={{ marginLeft: 10 }}
+              >
+                下一页
+              </Button>
+            </div>
           )}
         </div>
       </Content>
